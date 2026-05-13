@@ -1,0 +1,13 @@
+[Unit]
+Description=Re-apply max fan duty every 5 min (catch EC reset events on suspend/resume etc.)
+Documentation=https://github.com/frstrtr/clevo_maxfan
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=5min
+AccuracySec=10s
+Persistent=true
+Unit=clevo-fan-max.service
+
+[Install]
+WantedBy=timers.target

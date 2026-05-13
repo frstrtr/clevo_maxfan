@@ -1,0 +1,13 @@
+[Unit]
+Description=Max chassis fans on Clevo laptops (thermal protection for headless / 24x7 use)
+Documentation=https://github.com/frstrtr/clevo_maxfan
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/clevo-fan-cli 100
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
