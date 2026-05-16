@@ -73,13 +73,32 @@ static int ec_io_do(uint32_t cmd, uint32_t port, uint8_t value) {
     return ec_io_wait(EC_SC, IBF, 0);
 }
 
-static int set_fan_duty(int pct) {
+/* Set fan duty for one specific plane (0x01 = CPU fan, 0x02 = GPU fan on
+ * dual-plane chassis like the P77xDM2-G). Single-plane chassis (e.g.
+ * P775DM) only respond to 0x01; passing 0x02 there is harmless.
+ */
+static int set_fan_duty_plane(int pct, uint8_t fan_id) {
     if (pct < 60 || pct > 100) {
         fprintf(stderr, "fan duty out of range (allowed 60-100): %d\n", pct);
         return -1;
     }
     int raw = (int)((double)pct / 100.0 * 255.0);
-    return ec_io_do(0x99, 0x01, raw);
+    return ec_io_do(0x99, fan_id, raw);
+}
+
+/* Default behaviour: set BOTH fan planes (CPU + GPU). The heat pipes
+ * between CPU and GPU heatsinks mean either fan can shed thermal load
+ * from either component — running both at the same duty maximises that
+ * coupling. On single-plane chassis the 0x02 write is a harmless no-op.
+ */
+static int set_fan_duty(int pct) {
+    int r1 = set_fan_duty_plane(pct, 0x01);  /* CPU fan */
+    int r2 = set_fan_duty_plane(pct, 0x02);  /* GPU fan */
+    if (r1 != 0 || r2 != 0) {
+        fprintf(stderr, "set_fan_duty: CPU plane=%d GPU plane=%d\n", r1, r2);
+        return -1;
+    }
+    return 0;
 }
 
 int main(int argc, char** argv) {

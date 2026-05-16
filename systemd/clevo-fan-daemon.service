@@ -1,0 +1,66 @@
+[Unit]
+Description=Clevo fan binary controller — full-blast over GPU load, otherwise 60%
+Documentation=https://github.com/frstrtr/law-rag/blob/main/scripts/clevo_fan_daemon.py
+After=network-online.target
+ConditionPathExists=/usr/local/bin/clevo-fan-cli
+
+# Replaces the older clevo-fan-max.timer (5-min force-max retimer). This unit
+# is a long-running daemon that flips between LOW_DUTY (60%) and HIGH_DUTY
+# (100%) based on real-time GPU load — no more sleeping at 100% when the GPU
+# is idle.
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10s
+User=root
+Group=root
+
+# Survival-tuned thresholds for a DUAL-FAN, heat-pipe-coupled Clevo
+# P77xDM2-G — CPU and GPU heatplates share thermal mass, so either
+# component's heat affects the other and either should trigger BOTH fans
+# to max. Goal: silicon longevity (Arrhenius: every -10°C ≈ 2× life) and
+# minimizing thermal cycling (BGA solder fatigue). Edit here →
+# systemctl daemon-reload + systemctl restart clevo-fan-daemon.
+
+# GPU (nvidia-smi-driven) — engages early; LOW return at ≤45°C is reachable
+# because GPU naturally idles low when no model is resident.
+Environment=CLEVO_FAN_GPU_HIGH_UTIL=15
+Environment=CLEVO_FAN_GPU_HIGH_TEMP=60
+Environment=CLEVO_FAN_GPU_LOW_UTIL=5
+Environment=CLEVO_FAN_GPU_LOW_TEMP=45
+
+# CPU (/proc/stat util + /sys/class/thermal coretemp) — i7-6700K idles
+# warm (~55-60°C), so LOW_TEMP=65 is the lowest sustained idle we can
+# realistically expect. HIGH at util≥40% covers real inference work
+# while ignoring background noise.
+Environment=CLEVO_FAN_CPU_HIGH_UTIL=40
+Environment=CLEVO_FAN_CPU_HIGH_TEMP=70
+Environment=CLEVO_FAN_CPU_LOW_UTIL=15
+Environment=CLEVO_FAN_CPU_LOW_TEMP=65
+
+Environment=CLEVO_FAN_HIGH_DEBOUNCE=1
+Environment=CLEVO_FAN_LOW_DEBOUNCE=180
+Environment=CLEVO_FAN_LOW_DUTY=60
+Environment=CLEVO_FAN_HIGH_DUTY=100
+Environment=CLEVO_FAN_POLL_SECONDS=1
+# Minimum dwell time in HIGH state after entering it — prevents
+# micro-cycling on bursty inference workloads. 60s is a balance: long
+# enough to absorb bursts, short enough that fans aren't running max for
+# arbitrary windows after a brief blip.
+Environment=CLEVO_FAN_MIN_TIME_AT_HIGH=60
+
+ExecStart=/usr/local/bin/clevo_fan_daemon.py
+StandardOutput=journal
+StandardError=journal
+
+# Minimal hardening — needs CAP_SYS_RAWIO transitively via the CLI binary
+# which uses ioperm/inb/outb. Don't sandbox too hard or the CLI can't talk
+# to the EC.
+ProtectSystem=strict
+ReadWritePaths=/var/log
+NoNewPrivileges=no
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
